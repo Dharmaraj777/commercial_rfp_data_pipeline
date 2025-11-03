@@ -1,47 +1,24 @@
+import json
 from io import BytesIO
 from azure.storage.blob import BlobServiceClient
-import pandas as pd
-from openpyxl import load_workbook
-import io
-import os
-import snowflake.connector
+from commercial_rfp_shared_logger import logger, log_stream
 
 class UtilityFunctions:
+    def __init__(self, config, today_date, log_file_name):
+        self.config = config
+        self.today_date = today_date
+        self.log_file_name = log_file_name
 
-    def __init__(self):
-        '''
-        This function initalize static varibales set in config.json
-        '''
-     
-    def upload_result_to_blob_container(self, file, df, output_container_name, blob_service_client ):
-    '''
-    This function uploads result to Azure Container
-    1. Establish connection to Azure Blob Storage
-    2. Create an in-memory bytes buffer
-    3. Write Dataframe to the buffer as an Excel file
-    
-    '''
-    """Write new_df as an Excel file directly to Azure Blob Storage without saving locally."""
-    container_client = connect_to_blob_storage_output_container(output_container_name, blob_service_client)
-    if container_client is None:
-        logger.error(f"Failed to connect to Azure Blob Storage to upload results {output_container_name}.")
-        return
+    def upload_log_to_blob(self, log_file_name, logs_container):
+        connection_string = self.config["storage_connection_string"]
+        blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+        blob_client = blob_service_client.get_blob_client(container=logs_container, blob=log_file_name)
+        log_data = log_stream.getvalue().encode('utf-8')
+        blob_client.upload_blob(BytesIO(log_data), overwrite=True)
+        logger.info(f"Log file {log_file_name} uploaded to {logs_container}")
 
-    try:
-        # Create an in-memory bytes buffer
-        output_stream = io.BytesIO()
+    # Add all your shared/helper functions here (e.g., for blob, graph, etc.)
 
-        # Write DataFrame to the buffer as an Excel file
-        with pd.ExcelWriter(output_stream) as writer:
-            df.to_excel(writer, index=False)
-
-        # Move to the beginning of the stream
-        output_stream.seek(0)
-
-        # Upload the buffer to Azure Blob Storage
-        container_client.upload_blob(name=file, data=output_stream, overwrite=True)
-
-        logger.info(f"Excel file '{file}' uploaded successfully to Azure Blob Storage.")
-
-    except Exception as e:
-        logger.error(f"Error uploading Excel file '{file}' to Azure Blob Storage: Error: {e}")
+def load_config(config_file='config.json'):
+    with open(config_file, 'r') as f:
+        return json.load(f)
