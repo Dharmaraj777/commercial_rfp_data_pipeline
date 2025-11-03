@@ -82,6 +82,3 @@ def commercial_rfp_delete_indexed_files_and_reset_indexer():
         logger.exception("Error resetting Azure Search indexes.")
         upload_log_to_blob(log_file_name, config_loader)
         # return func.HttpResponse(f"Error: {str(e)}", status_code=500)
-
-#calling
-commercial_rfp_delete_indexed_files_and_reset_indexer()
