@@ -31,3 +31,25 @@ df=df[['Client Name',	'RFP Type',	'Consultant',	'Date',	'Question',	'Response']]
 df = generate_rfp_key(df)
 
 df.head(2)
+
+======================================================
+
+    def reset_indexer(self, indexer_client: SearchIndexerClient, indexer_name: str) -> None:
+        """
+        Reset the indexer and then re-run it after a short delay.
+        """
+        try:
+            logger.info(f"Resetting indexer: {indexer_name}")
+            indexer_client.reset_indexer(indexer_name)
+
+            # Delay before re-running
+            logger.info("Waiting 10 seconds before running indexer...")
+            time.sleep(10)
+
+            logger.info(f"Running indexer: {indexer_name}")
+            indexer_client.run_indexer(indexer_name)
+
+            logger.info(f"Indexer '{indexer_name}' has been reset and re-run successfully.")
+        except Exception as e:
+            logger.exception(f"Error while resetting and running indexer '{indexer_name}': {e}")
+
