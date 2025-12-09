@@ -34,33 +34,35 @@ from azure.search.documents.indexes.models import (
     SearchIndexer,
     FieldMapping,
 )
-from commercial_rfp_shared_logger import logger
-from commercial_rfp_config_loader import ConfigLoader
-
+from .commercial_rfp_shared_logger import logger
+from .commercial_rfp_config_loader import ConfigLoader
+ 
 class AzureAISearchResourceManager:
     def __init__(self):
         self.config_loader = ConfigLoader.get_instance()
-        config = self.config_loader.config_details
+        # config = self.config_loader.config_details
 
         # Search service configs
-        self.search_endpoint = config["cogsearch_endpoint"]
-        self.azure_search_api_key = config["cogsearch_api_key"]
-        self.blob_connection_string = config["storage_connection_string"]
-        self.blob_container_name = config["commercial_rfp_survey_content_doc_library"]
+        self.search_endpoint =  self.config_loader.cogsearch_endpoint
+        self.azure_search_api_key = self.config_loader.cogsearch_api_key
+        self.blob_connection_string =  self.config_loader.connection_string
+        self.blob_container_name = self.config_loader.commercial_rfp_survey_content_doc_library
 
-        self.azure_openai_endpoint = config["openai_api_base"]
-        self.azure_openai_key = config["openai_api_key"]
-        self.azure_openai_embedding_deployment = config["openai_embedding_model"]
-        self.openai_embedding_model_name = config["openai_embedding_model_name"]
+        self.azure_openai_endpoint = self.config_loader.azure_openai_endpoint
+        self.azure_openai_key = self.config_loader.azure_openai_key
+        self.azure_openai_embedding_deployment = self.config_loader.azure_openai_embedding_deployment
+        self.openai_embedding_model_name = self.config_loader.openai_embedding_model_name
         self.azure_openai_model_dimensions = 1536
-        self.index_name = config["commercial_rfp_survey_index_name"]
-        self.indexer_name = config["commercial_rfp_survey_indexer_name"]
+        self.index_name = self.config_loader.index_name
+        self.indexer_name = self.config_loader.indexer_name
         self.credential = AzureKeyCredential(self.azure_search_api_key)
         self.skillset_name = f"{self.index_name}-skillset"
         self.data_source_name = f"{self.index_name}-datasource"
 
         self.index_client = SearchIndexClient(endpoint=self.search_endpoint, credential=self.credential)
         self.indexer_client = SearchIndexerClient(endpoint=self.search_endpoint, credential=self.credential)
+
+
 
     def ensure_data_source(self):
         logger.info(f"Checking/creating data source connection: {self.data_source_name}")
@@ -77,7 +79,7 @@ class AzureAISearchResourceManager:
             logger.info(f"Data source '{self.data_source_name}' already exists.")
         except Exception:
             # Data source doesn't exist, create it
-            self.indexer_client.create_data_source_connection(data_source_connection)
+            self.indexer_client.create_or_update_data_source_connection(data_source_connection)
             logger.info(f"Data source '{self.data_source_name}' created.")
 
     def ensure_index(self):
@@ -153,8 +155,9 @@ class AzureAISearchResourceManager:
             logger.info(f"Index '{self.index_name}' already exists.")
         except Exception:
             # Create index if missing
-            self.index_client.create_index(index)
+            self.index_client.create_or_update_index(index)
             logger.info(f"Index '{self.index_name}' created.")
+
 
     def ensure_skillset(self):
         logger.info(f"Checking/creating skillset: {self.skillset_name}")
@@ -215,7 +218,7 @@ class AzureAISearchResourceManager:
             logger.info(f"Skillset '{self.skillset_name}' already exists.")
         except Exception:
             # Create skillset if missing
-            self.indexer_client.create_skillset(skillset)
+            self.indexer_client.create_or_update_skillset(skillset)
             logger.info(f"Skillset '{self.skillset_name}' created.")
 
     def ensure_indexer(self):
@@ -239,8 +242,9 @@ class AzureAISearchResourceManager:
             existing = self.indexer_client.get_indexer(self.indexer_name)
             logger.info(f"Indexer '{self.indexer_name}' already exists.")
         except Exception:
-            self.indexer_client.create_indexer(indexer)
+            self.indexer_client.create_or_update_indexer(indexer)
             logger.info(f"Indexer '{self.indexer_name}' created.")
+
 
     def run_indexer(self):
         try:
@@ -255,9 +259,5 @@ class AzureAISearchResourceManager:
         self.ensure_index()
         self.ensure_skillset()
         self.ensure_indexer()
-        self.run_indexer()
+        # self.run_indexer()
         logger.info("=== All Azure AI Search Resources checked/created ===")
-
-# For standalone usage:
-if __name__ == "__main__":
-    AzureAISearchResourceManager().ensure_all_resources_exist()

@@ -5,9 +5,9 @@ from io import BytesIO
 import warnings
 import urllib.parse
 import requests
-from commercial_rfp_shared_logger import logger
-from commercial_rfp_config_loader import ConfigLoader
-from commercial_rfp_data_ingestion_utils import UtilityFunctions
+from .commercial_rfp_shared_logger import logger
+from .commercial_rfp_config_loader import ConfigLoader
+from .commercial_rfp_data_ingestion_utils import UtilityFunctions
 
 warnings.filterwarnings("ignore")
 
@@ -25,7 +25,7 @@ class DataIngestion():
         self.input_folder_path = self.config_loader.input_folder_path
         self.output_folder_path = self.config_loader.output_folder_path
         self.azure_connection_string = self.config_loader.connection_string
-        self.azure_output_container_name =- self.config_loader.content_container_name
+        self.azure_output_container_name = self.config_loader.content_container_name
         self.commercial_rfp_survey_raw_data_files = self.config_loader.commercial_rfp_survey_raw_data_files
    
     def download_latest_excel_from_sharepoint_folder(self, access_token: str, site_url: str, folder_path: str) -> BytesIO:

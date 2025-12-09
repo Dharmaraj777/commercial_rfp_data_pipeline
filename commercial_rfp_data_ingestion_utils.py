@@ -3,11 +3,10 @@ import pandas as pd
 import io
 import requests
 import urllib.parse
-from commercial_rfp_shared_logger import logger, log_stream
+from .commercial_rfp_shared_logger import logger, log_stream
+from msal import ConfidentialClientApplication
 
 class UtilityFunctions:
-    def __init__(self):
-        pass
 
     def upload_result_to_blob_container(self, file, df, output_container_name, blob_service_client):
         try:
@@ -31,7 +30,6 @@ class UtilityFunctions:
             logger.error(f"Failed to upload log file {blob_name} to '{container_name}': {e}")
 
     def get_graph_access_token(self, cert_path, thumbprint, client_id, tenant_id):
-        from msal import ConfidentialClientApplication
         authority = f"https://login.microsoftonline.com/{tenant_id}"
         scope = ["https://graph.microsoft.com/.default"]
         with open(cert_path, "rb") as f:

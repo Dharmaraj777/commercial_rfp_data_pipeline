@@ -1,12 +1,12 @@
 import os
 import requests
 import pandas as pd
-from commercial_rfp_config_loader import ConfigLoader
+from .commercial_rfp_config_loader import ConfigLoader
 import urllib.parse
 from datetime import datetime
-from commercial_rfp_shared_logger import logger
+from .commercial_rfp_shared_logger import logger
 import io
-from commercial_rfp_data_ingestion_utils import UtilityFunctions
+from .commercial_rfp_data_ingestion_utils import UtilityFunctions
 
 class CitationMapper:
     def __init__(self):
@@ -23,7 +23,7 @@ class CitationMapper:
         self.container_client = self.config_loader.blob_service_client.get_container_client(self.config_loader.commercial_rfp_survey_content_doc_library)
     
 
-    def upload_cititation_files_to_SharePoint(self):
+    def upload_docx_files_to_SharePoint_and_create_citation_map(self):
         logger.info("Starting upload_citation_files_to_sharepoint process...")
 
         try:
@@ -37,7 +37,6 @@ class CitationMapper:
             
             # Upload each blob and collect mapping
             mapping = []
-
             for blob in self.container_client.list_blobs():
                 blob_client = self.container_client.get_blob_client(blob.name)
                 blob_data = blob_client.download_blob().readall()
@@ -47,8 +46,8 @@ class CitationMapper:
                         "file_name": item["name"],
                         "preview_url": item["webUrl"]
                     })
-                    print(f"Uploaded: {item['name']}")
-                    print(f"URL: {item['webUrl']}")
+                    # print(f"Uploaded: {item['name']}")
+                    # print(f"URL: {item['webUrl']}")
                     logger.info(f"Uploaded: {item['name']} | URL: {item['webUrl']}")
 
 
