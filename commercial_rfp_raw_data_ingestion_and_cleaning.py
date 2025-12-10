@@ -8,6 +8,7 @@ import requests
 from .commercial_rfp_shared_logger import logger
 from .commercial_rfp_config_loader import ConfigLoader
 from .commercial_rfp_data_ingestion_utils import UtilityFunctions
+import hashlib
 
 warnings.filterwarnings("ignore")
 
@@ -27,6 +28,49 @@ class DataIngestion():
         self.azure_connection_string = self.config_loader.connection_string
         self.azure_output_container_name = self.config_loader.content_container_name
         self.commercial_rfp_survey_raw_data_files = self.config_loader.commercial_rfp_survey_raw_data_files
+
+    @staticmethod
+    def _key_from_hash(text: str, algo: str = "md5") -> str:
+        """Build a stable RFP_Content_* hash from a text snippet."""
+        if text is None:
+            text = ""
+        snippet = text[:120]
+        data = snippet.encode("utf-8")
+
+        if algo == "md5":
+            hash_hex = hashlib.md5(data).hexdigest()
+        elif algo == "sha1":
+            hash_hex = hashlib.sha1(data).hexdigest()
+        elif algo == "sha256":
+            hash_hex = hashlib.sha256(data).hexdigest()
+        else:
+            raise ValueError(f"Unsupported hash algorithm: {algo}")
+
+        return f"RFP_Content_{hash_hex}"
+
+    def _add_rfp_keys(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Add `key` and `key_hash` columns to the final cleaned RFP dataframe."""
+        df = df.copy()
+
+        # Normalize date to a consistent string form if present
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+
+        def build_key(row):
+            client = str(row.get("client name", "")).strip()
+            rfp_type = str(row.get("rfp type", "")).strip()
+            consultant = str(row.get("consultant", "")).strip()
+            date = str(row.get("date", "")).strip()
+            question = str(row.get("question", "")).strip()
+            return f"{client}_{date}_{rfp_type}_{consultant}_{question}"
+
+        df["key"] = df.apply(build_key, axis=1)
+        df["key_hash"] = (
+            df["key"]
+            .str.replace(r"\s+", "", regex=True)
+            .apply(lambda x: self._key_from_hash(x, algo="md5"))
+        )
+        return df
    
     def download_latest_excel_from_sharepoint_folder(self, access_token: str, site_url: str, folder_path: str) -> BytesIO:
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -238,8 +282,9 @@ class DataIngestion():
             df_rfp.columns = df_rfp.columns.str.lower()
             logger.info(f"Original dataset of 'RFP content': {df_rfp.shape}")
 
-            #Uploading File to original container
+            #Uploading raw file to raw-data container
             self.utils.upload_result_to_blob_container( original_filename, df_rfp, self.commercial_rfp_survey_raw_data_files, self.config_loader.blob_service_client)
+
 
             clean_df = self.clean_data(df_rfp)
             filtered_df = self.drop_duplicates_same_question_and_response(clean_df)
@@ -256,11 +301,14 @@ class DataIngestion():
                 regex=True
             )
 
+            # Add stable key + hash per row
+            final_rfp_df = self._add_rfp_keys(final_rfp_df)
+
 
             timestamp = datetime.now().strftime("%Y%m%d")
             rfp_filename = f"RFP_content_library_{timestamp}.xlsx"
 
-            self.utils.upload_result_to_blob_container(rfp_filename, clean_df, self.azure_output_container_name, self.config_loader.blob_service_client)
+            self.utils.upload_result_to_blob_container(rfp_filename, final_rfp_df, self.azure_output_container_name, self.config_loader.blob_service_client)
 
             logger.info("Commercial RFP data cleaning completed successfully.")
         except Exception as e:

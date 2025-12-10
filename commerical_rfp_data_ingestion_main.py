@@ -1,7 +1,7 @@
 from datetime import datetime
 from .commercial_rfp_shared_logger import logger
 from .commercial_rfp_config_loader import ConfigLoader
-from .commercial_rfp_create_blob_containers import CreatContainers
+from .commercial_rfp_create_blob_containers import CreateContainers
 from .commercial_rfp_indexer import AzureAISearchResourceManager
 from .commercial_rfp_data_ingestion_utils import UtilityFunctions
 from .commercial_rfp_raw_data_ingestion_and_cleaning import DataIngestion
@@ -18,8 +18,8 @@ def commercial_rfp_data_pipeline(req: func.HttpRequest) -> func.HttpResponse:
     logger.info("*********** Commercial RFP Data Pipeline: START ***********")
 
     try:
-        container_creator = CreatContainers()
-        container_creator.creat_containers()
+        container_creator = CreateContainers()
+        container_creator.create_containers()
 
         indexer_creator = AzureAISearchResourceManager()
         indexer_creator.ensure_all_resources_exist()

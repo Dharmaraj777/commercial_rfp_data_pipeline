@@ -4,12 +4,12 @@ from .commercial_rfp_config_loader import ConfigLoader
 
 
 
-class CreatContainers():
+class CreateContainers():
     def __init__(self):
         self.config_loader = ConfigLoader.get_instance()
         self.blob_service_client = self.config_loader.blob_service_client 
 
-    def creat_containers(self):
+    def create_containers(self):
         # List of containers to create
         container_names = [
             "commercial-rfp-survey-content-library",

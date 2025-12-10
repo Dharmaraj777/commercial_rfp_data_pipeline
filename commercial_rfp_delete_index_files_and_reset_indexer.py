@@ -1,8 +1,9 @@
-from .commercial_rfp_shared_logger import logger
 from azure.search.documents import SearchClient
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents.indexes import SearchIndexerClient
+from .commercial_rfp_shared_logger import logger
 from .commercial_rfp_config_loader import ConfigLoader
+import time
 
 
 class IndexCleaner:   
@@ -23,9 +24,21 @@ class IndexCleaner:
             result = search_client.upload_documents(documents=batch)
             logger.info(f"Deleted batch with {len(batch)} documents, result: {result}")
 
-    def reset_indexer(self, indexer_client, indexer_name):
-        indexer_client.reset_indexer(indexer_name)
-        logger.info(f"Indexer '{indexer_name}' reset successfully.")
+    def reset_and_run_indexer(self, indexer_client, indexer_name):
+        try:
+            logger.info(f"Resetting indexer: {indexer_name}")
+            indexer_client.reset_indexer(indexer_name)
+
+            # Delay before re-running
+            logger.info("Waiting 10 seconds before running indexer...")
+            time.sleep(10)
+
+            logger.info(f"Running indexer: {indexer_name}")
+            indexer_client.run_indexer(indexer_name)
+
+            logger.info(f"Indexer '{indexer_name}' has been reset and re-run successfully.")
+        except Exception as e:
+            logger.exception(f"Error while resetting and running indexer '{indexer_name}': {e}")
 
 
     def commercial_rfp_delete_indexed_files_and_reset_indexer(self):
@@ -48,6 +61,6 @@ class IndexCleaner:
             # Reset and run indexers
             if self.indexer_name:
                 logger.info(f"Resetting and running indexer: {self.indexer_name}")
-                self.reset_indexer(indexer_client, self.indexer_name)
+                self.reset_and_run_indexer(indexer_client, self.indexer_name)
         except Exception as e:
             logger.exception("Error resetting Azure Search indexes.")
