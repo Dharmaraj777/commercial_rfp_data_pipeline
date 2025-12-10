@@ -186,11 +186,25 @@ class CitationMapper:
                         }
                     )
 
-            # 6) Build mapping DataFrame and upload
+            # 6) Build mapping DataFrame
             if mapping_rows:
-                df = pd.DataFrame(mapping_rows).drop_duplicates(subset=["file_name"])
+                df = pd.DataFrame(mapping_rows)
             else:
                 df = pd.DataFrame(columns=["file_name", "preview_url"])
+
+            # ---- DUPLICATE KEY CHECK (mapping-level) ----
+            if not df.empty:
+                dup_mask = df["file_name"].duplicated(keep=False)
+                if dup_mask.any():
+                    dup_df = df.loc[dup_mask].sort_values("file_name")
+                    dup_names = dup_df["file_name"].unique().tolist()
+                    logger.warning(
+                        f"[MAPPING] Detected duplicate file_name keys in mapping: "
+                        f"{len(dup_names)} duplicated keys. Examples: {dup_names[:10]}"
+                    )
+
+                # Ensure mapping we write has unique keys
+                df = df.drop_duplicates(subset=["file_name"], keep="last")
 
             mapping_blob_name = self.mapping_filename or "rfp_content_docx_preview_mapping.xlsx"
 
@@ -203,10 +217,8 @@ class CitationMapper:
 
             logger.info(
                 f"Citation mapping written to blob '{mapping_blob_name}' "
-                f"with {len(df)} rows."
+                f"with {len(df)} unique keys (file_name)."
             )
-
-            logger.info("Citation mapping and SharePoint upload process completed successfully.")
 
         except Exception as e:
             logger.exception(f"Failed in upload_citation_files_to_sharepoint: {e}")

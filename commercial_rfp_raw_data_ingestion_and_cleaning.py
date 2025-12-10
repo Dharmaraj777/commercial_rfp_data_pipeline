@@ -62,7 +62,12 @@ class DataIngestion():
             consultant = str(row.get("consultant", "")).strip()
             date = str(row.get("date", "")).strip()
             question = str(row.get("question", "")).strip()
-            return f"{client}_{date}_{rfp_type}_{consultant}_{question}"
+            response = str(row.get("response", "")).strip()
+
+            q_snip = question[:120]
+            r_snip = response[:120]
+
+            return f"{client}_{date}_{rfp_type}_{consultant}_{q_snip}_{r_snip}"
 
         df["key"] = df.apply(build_key, axis=1)
         df["key_hash"] = (
