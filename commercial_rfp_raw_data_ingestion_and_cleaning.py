@@ -287,11 +287,14 @@ class DataIngestion():
             df_rfp.columns = df_rfp.columns.str.lower()
             logger.info(f"Original dataset of 'RFP content': {df_rfp.shape}")
 
+            # Add stable key + hash per row
+            df_rfp_with_keys = self._add_rfp_keys(df_rfp)
+
             #Uploading raw file to raw-data container
-            self.utils.upload_result_to_blob_container( original_filename, df_rfp, self.commercial_rfp_survey_raw_data_files, self.config_loader.blob_service_client)
+            self.utils.upload_result_to_blob_container( original_filename, df_rfp_with_keys, self.commercial_rfp_survey_raw_data_files, self.config_loader.blob_service_client)
 
 
-            clean_df = self.clean_data(df_rfp)
+            clean_df = self.clean_data(df_rfp_with_keys)
             filtered_df = self.drop_duplicates_same_question_and_response(clean_df)
             df_kept = self.same_question_duplicate_response(filtered_df)
             df_unique_date_question = self.get_unique_date_question_with_longest_response(df_kept)
@@ -306,8 +309,7 @@ class DataIngestion():
                 regex=True
             )
 
-            # Add stable key + hash per row
-            final_rfp_df = self._add_rfp_keys(final_rfp_df)
+            
 
 
             timestamp = datetime.now().strftime("%Y%m%d")
