@@ -1,4 +1,5 @@
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 from docx import Document
 from datetime import datetime
@@ -16,6 +17,8 @@ class DocLibraryCreator:
         self.out_blob_client = self.config_loader.blob_service_client.get_container_client(
             self.config_loader.commercial_rfp_survey_content_doc_library
         )
+        # You can tune this or expose in config later
+        self.max_workers = getattr(self.config_loader, "doc_library_max_workers", 5)
 
     def read_excel_from_blob(self, blob_client, blob_name: str) -> pd.DataFrame:
         stream = blob_client.get_blob_client(blob_name).download_blob().readall()
@@ -68,6 +71,54 @@ class DocLibraryCreator:
         buffer.seek(0)
         return buffer.read()
 
+    def _process_single_row(
+        self,
+        latest_blob_name: str,
+        row: pd.Series,
+        response_col: str,
+        has_key_hash: bool,
+        reference_col: str | None,
+    ) -> None:
+        """
+        Helper to create a single .docx from a row and upload it to the output container.
+        Intended to be run inside a ThreadPoolExecutor.
+        """
+        try:
+            if has_key_hash:
+                key_hash_val = row.get("key_hash")
+                if pd.isna(key_hash_val) or str(key_hash_val).strip() == "":
+                    # Nothing to do if key is missing
+                    return
+
+                base_name = str(key_hash_val).strip()
+                if base_name.lower().endswith(".docx"):
+                    docx_file_name = base_name
+                else:
+                    docx_file_name = f"{base_name}.docx"
+            else:
+                # Fallback to old behavior: use the first column as a reference ID
+                if reference_col is None:
+                    # Should not happen, but be safe
+                    return
+                ref_val = row.get(reference_col, None)
+                if pd.isna(ref_val) or str(ref_val).strip() == "":
+                    return
+                if isinstance(ref_val, float) and ref_val.is_integer():
+                    ref_val = int(ref_val)
+                docx_file_name = f"RFP_Content_Library_{ref_val}.docx"
+
+            # Create .docx content with correct source file name
+            docx_bytes = self.create_docx_content(latest_blob_name, row, response_col)
+
+            self.out_blob_client.get_blob_client(docx_file_name).upload_blob(
+                docx_bytes,
+                overwrite=True,
+            )
+            logger.info(f"[docx] Uploaded {docx_file_name}")
+
+        except Exception as e:
+            logger.exception(f"[docx] Failed to create/upload docx for row with key_hash='{row.get('key_hash', None)}': {e}")
+
     def commerercial_rfp_content_doc_library_creation(self):
         logger.info("Creating .docx files and uploading to blob storage container.")
         try:
@@ -80,6 +131,7 @@ class DocLibraryCreator:
 
             # Rebuild the content-doc library container from scratch each run.
             # SharePoint cleanup is handled separately in the citation mapper.
+            logger.info("Clearing existing blobs from content-doc library container...")
             for blob in self.out_blob_client.list_blobs():
                 self.out_blob_client.get_blob_client(blob.name).delete_blob()
 
@@ -101,35 +153,43 @@ class DocLibraryCreator:
                 return
 
             has_key_hash = "key_hash" in df.columns
-
-            for _, row in df.iterrows():
-                if has_key_hash:
-                    key_hash_val = row.get("key_hash")
-                    if pd.isna(key_hash_val) or str(key_hash_val).strip() == "":
-                        continue
-
-                    base_name = str(key_hash_val).strip()
-                    if base_name.lower().endswith(".docx"):
-                        docx_file_name = base_name
-                    else:
-                        docx_file_name = f"{base_name}.docx"
-                else:
-                    # Fallback to old behavior: use the first column as a reference ID
+            reference_col = None
+            if not has_key_hash:
+                # Use first column as reference ID in legacy mode
+                if len(df.columns) > 0:
                     reference_col = df.columns[0]
-                    ref_val = row.get(reference_col, None)
-                    if pd.isna(ref_val) or str(ref_val).strip() == "":
-                        continue
-                    if isinstance(ref_val, float) and ref_val.is_integer():
-                        ref_val = int(ref_val)
-                    docx_file_name = f"RFP_Content_Library_{ref_val}.docx"
 
-                # Create .docx content with correct source file name
-                docx_bytes = self.create_docx_content(latest_blob_name, row, response_col)
-                self.out_blob_client.get_blob_client(docx_file_name).upload_blob(
-                    docx_bytes,
-                    overwrite=True,
-                )
+            if df.empty:
+                logger.info("RFP content library dataframe is empty; nothing to create.")
+                return
+
+            logger.info(
+                f"Starting concurrent docx creation for {len(df)} rows "
+                f"(has_key_hash={has_key_hash}, max_workers={self.max_workers})"
+            )
+
+            # Concurrently create & upload docx files
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {
+                    executor.submit(
+                        self._process_single_row,
+                        latest_blob_name,
+                        row,
+                        response_col,
+                        has_key_hash,
+                        reference_col,
+                    ): idx
+                    for idx, row in df.iterrows()
+                }
+
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logger.exception(f"[docx] Unhandled error while processing row index {idx}: {e}")
 
             logger.info("Docx creation and upload completed.")
+
         except Exception as e:
             logger.critical(f"Pipeline failed: {e}", exc_info=True)
